@@ -7,88 +7,85 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: '*' },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    maxHttpBufferSize: 10e6 // 10MB for media
 });
 
 const PORT = process.env.PORT || 3001;
-
-// In-memory storage — works on any host including Render free tier
 const messagesByRoom = {};
 
-function getMessages(roomId) {
-    return messagesByRoom[roomId] || [];
-}
-
+function getMessages(roomId) { return messagesByRoom[roomId] || []; }
 function saveMessage(msg) {
-    if (!messagesByRoom[msg.roomId]) {
-        messagesByRoom[msg.roomId] = [];
-    }
+    if (!messagesByRoom[msg.roomId]) messagesByRoom[msg.roomId] = [];
     messagesByRoom[msg.roomId].push(msg);
-    // Keep only last 200 messages per room
-    if (messagesByRoom[msg.roomId].length > 200) {
-        messagesByRoom[msg.roomId].shift();
-    }
+    if (messagesByRoom[msg.roomId].length > 300) messagesByRoom[msg.roomId].shift();
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Health check route (keeps Render free instance alive if pinged)
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log('Connected:', socket.id);
 
-    socket.on('join-room', (data) => {
-        const { user, peer, roomId } = data;
+    socket.on('join-room', ({ user, peer, roomId }) => {
         socket.join(roomId);
         socket.data.user = user;
         socket.data.roomId = roomId;
-        console.log(`${user} joined room: ${roomId}`);
-
-        // Send existing messages for this room
         socket.emit('init-messages', getMessages(roomId));
-        
-        // Notify peer that user is online
         socket.to(roomId).emit('peer-online', { user });
+        console.log(`${user} joined ${roomId}`);
     });
 
     socket.on('send-message', (data) => {
         const message = {
             id: Date.now().toString(),
             roomId: data.roomId,
-            text: data.text,
+            text: data.text || '',
             sender: data.sender,
+            type: data.type || 'text',     // 'text' | 'image' | 'file'
+            fileName: data.fileName || '',
+            fileData: data.fileData || '',  // base64
             timestamp: new Date().toISOString()
         };
         saveMessage(message);
         io.to(data.roomId).emit('new-message', message);
     });
 
-    socket.on('clear-chat', (data) => {
-        if (messagesByRoom[data.roomId]) {
-            messagesByRoom[data.roomId] = [];
+    socket.on('delete-message', ({ roomId, messageId, deleteFor }) => {
+        if (deleteFor === 'everyone' && messagesByRoom[roomId]) {
+            messagesByRoom[roomId] = messagesByRoom[roomId].filter(m => m.id !== messageId);
+            io.to(roomId).emit('message-deleted', { messageId });
         }
-        io.to(data.roomId).emit('chat-cleared');
+        // 'for-me' is purely client-side
     });
 
-    // WebRTC Signaling
-    socket.on('signal', (data) => {
-        socket.to(data.roomId).emit('signal', {
-            sender: data.sender,
-            signal: data.signal
-        });
+    socket.on('clear-chat', ({ roomId }) => {
+        if (messagesByRoom[roomId]) messagesByRoom[roomId] = [];
+        io.to(roomId).emit('chat-cleared');
+    });
+
+    // Video call signaling
+    socket.on('call-request', ({ roomId, from }) => {
+        socket.to(roomId).emit('incoming-call', { from });
+    });
+    socket.on('call-accepted', ({ roomId, from }) => {
+        socket.to(roomId).emit('call-accepted', { from });
+    });
+    socket.on('call-declined', ({ roomId, from }) => {
+        socket.to(roomId).emit('call-declined', { from });
+    });
+    socket.on('signal', ({ roomId, sender, signal }) => {
+        socket.to(roomId).emit('signal', { sender, signal });
+    });
+    socket.on('call-ended', ({ roomId }) => {
+        socket.to(roomId).emit('call-ended');
     });
 
     socket.on('disconnect', () => {
-        const roomId = socket.data.roomId;
-        const user = socket.data.user;
-        if (roomId) {
-            socket.to(roomId).emit('peer-offline', { user });
-        }
-        console.log('User disconnected:', user);
+        const { roomId, user } = socket.data;
+        if (roomId) socket.to(roomId).emit('peer-offline', { user });
+        console.log('Disconnected:', user);
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server on http://localhost:${PORT}`));
