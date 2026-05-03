@@ -18,6 +18,62 @@ let isCamOff = false;
 let callTimerInt = null;
 let callSeconds = 0;
 
+let audioCtx = null;
+let ringTimeout = null;
+
+function playRingtone(isOutgoing = false) {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        
+        const freq1 = isOutgoing ? 440 : 600;
+        const freq2 = isOutgoing ? 480 : 800;
+        const pattern = isOutgoing ? [2000, 3000] : [400, 200, 400, 2000];
+        let step = 0;
+        
+        stopRingtone();
+        const currentRing = { active: true };
+        ringTimeout = currentRing;
+        
+        function nextTone() {
+            if (!currentRing.active) return;
+            const duration = pattern[step];
+            const isOn = step % 2 === 0;
+            
+            if (isOn) {
+                const osc1 = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc1.connect(gain); osc2.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc1.type = 'sine'; osc2.type = 'sine';
+                osc1.frequency.value = freq1;
+                osc2.frequency.value = freq2;
+                
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.setTargetAtTime(0, audioCtx.currentTime + (duration/1000) - 0.05, 0.015);
+                
+                osc1.start(); osc2.start();
+                osc1.stop(audioCtx.currentTime + (duration/1000));
+                osc2.stop(audioCtx.currentTime + (duration/1000));
+            }
+            
+            step = (step + 1) % pattern.length;
+            setTimeout(nextTone, duration);
+        }
+        
+        nextTone();
+    } catch(e) { console.error("Audio API blocked or not supported:", e); }
+}
+
+function stopRingtone() {
+    if (ringTimeout) {
+        ringTimeout.active = false;
+        ringTimeout = null;
+    }
+}
+
 const ICE_CONFIG = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -102,15 +158,18 @@ socket.on('incoming-call', ({ from }) => {
     document.getElementById('caller-name').innerText = from.charAt(0).toUpperCase() + from.slice(1);
     document.getElementById('caller-avatar').innerText = from.charAt(0).toUpperCase();
     document.getElementById('incoming-call-modal').classList.remove('hidden');
+    playRingtone(false);
 });
 
 socket.on('call-accepted', async () => {
+    stopRingtone();
     document.getElementById('outgoing-status').innerText = 'Connecting...';
     await startCallUI();
     await setupPeerConnection(true);
 });
 
 socket.on('call-declined', () => {
+    stopRingtone();
     document.getElementById('outgoing-status').innerText = 'Call Declined';
     setTimeout(() => {
         document.getElementById('outgoing-call-modal').classList.add('hidden');
@@ -118,6 +177,7 @@ socket.on('call-declined', () => {
 });
 
 socket.on('call-ended', () => {
+    stopRingtone();
     document.getElementById('outgoing-call-modal').classList.add('hidden');
     document.getElementById('incoming-call-modal').classList.add('hidden');
     endCallUI();
@@ -191,12 +251,14 @@ function setupUIListeners() {
 
     // Call UI Buttons
     document.getElementById('accept-call-btn').addEventListener('click', async () => {
+        stopRingtone();
         document.getElementById('incoming-call-modal').classList.add('hidden');
         await startCallUI();
         await setupPeerConnection(false);
         socket.emit('call-accepted', { roomId, from: currentUser });
     });
     document.getElementById('decline-call-btn').addEventListener('click', () => {
+        stopRingtone();
         document.getElementById('incoming-call-modal').classList.add('hidden');
         socket.emit('call-declined', { roomId, from: currentUser });
     });
@@ -385,9 +447,11 @@ document.getElementById('video-call-btn').addEventListener('click', () => {
     document.getElementById('outgoing-avatar').innerText = peerUser.charAt(0).toUpperCase();
     document.getElementById('outgoing-status').innerText = 'Calling...';
     document.getElementById('outgoing-call-modal').classList.remove('hidden');
+    playRingtone(true);
 });
 
 document.getElementById('cancel-call-btn').addEventListener('click', () => {
+    stopRingtone();
     socket.emit('call-ended', { roomId });
     document.getElementById('outgoing-call-modal').classList.add('hidden');
 });
