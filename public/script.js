@@ -12,6 +12,19 @@ let typingTimeout = null;
 let replyingTo = null; // { id, text, sender }
 let selectedMessageId = null;
 
+let currentFacingMode = 'user';
+let isMuted = false;
+let isCamOff = false;
+let callTimerInt = null;
+let callSeconds = 0;
+
+const ICE_CONFIG = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+};
+
 // Socket & WebRTC
 const socket = io({ autoConnect: false, transports: ['websocket', 'polling'] });
 let peerConnection = null; let localStream = null;
@@ -296,5 +309,113 @@ function showContextMenu(e, id, isMine) {
 
 function showLightbox(src) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox').classList.remove('hidden'); }
 
-// WebRTC logic remains same as previous but omitted here for brevity (assuming you want to keep it simple, I will add stubs to prevent crash)
-document.getElementById('video-call-btn').addEventListener('click', () => alert('Video calls disabled in this update demo to save code space.'));
+// --- Video Call Logic ---
+document.getElementById('video-call-btn').addEventListener('click', () => {
+    socket.emit('call-request', { roomId, from: currentUser });
+    alert(`Calling ${peerUser.charAt(0).toUpperCase() + peerUser.slice(1)}... Waiting for them to accept.`);
+});
+
+async function startCallUI() {
+    document.getElementById('video-overlay').classList.remove('hidden');
+    document.getElementById('call-peer-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
+    
+    callSeconds = 0;
+    document.getElementById('call-timer').innerText = '00:00';
+    callTimerInt = setInterval(() => {
+        callSeconds++;
+        const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+        const s = String(callSeconds % 60).padStart(2, '0');
+        document.getElementById('call-timer').innerText = `${m}:${s}`;
+    }, 1000);
+
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: true });
+        document.getElementById('local-video').srcObject = localStream;
+    } catch (err) {
+        console.error(err);
+        alert('Could not access camera/mic.');
+        endCallUI();
+    }
+}
+
+async function setupPeerConnection(isCaller) {
+    peerConnection = new RTCPeerConnection(ICE_CONFIG);
+    if (localStream) localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+    
+    peerConnection.ontrack = (e) => {
+        document.getElementById('remote-video').srcObject = e.streams[0];
+    };
+    peerConnection.onicecandidate = (e) => {
+        if (e.candidate) socket.emit('signal', { roomId, sender: currentUser, signal: e.candidate });
+    };
+
+    if (isCaller) {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('signal', { roomId, sender: currentUser, signal: offer });
+    }
+}
+
+function endCallUI() {
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    if (peerConnection) { peerConnection.close(); peerConnection = null; }
+    clearInterval(callTimerInt);
+    document.getElementById('video-overlay').classList.add('hidden');
+    document.getElementById('local-video').srcObject = null;
+    document.getElementById('remote-video').srcObject = null;
+    localStream = null;
+    if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+
+function toggleMute() {
+    if (!localStream) return;
+    isMuted = !isMuted;
+    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+    const btn = document.getElementById('btn-mute');
+    isMuted ? btn.classList.add('muted') : btn.classList.remove('muted');
+}
+
+function toggleCam() {
+    if (!localStream) return;
+    isCamOff = !isCamOff;
+    localStream.getVideoTracks().forEach(t => t.enabled = !isCamOff);
+    const btn = document.getElementById('btn-toggle-cam');
+    isCamOff ? btn.classList.add('off') : btn.classList.remove('off');
+}
+
+async function flipCamera() {
+    if (!localStream) return;
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    
+    localStream.getTracks().forEach(t => t.stop());
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: !isMuted });
+        if (isCamOff) localStream.getVideoTracks().forEach(t => t.enabled = false);
+        
+        document.getElementById('local-video').srcObject = localStream;
+        
+        if (peerConnection) {
+            const senders = peerConnection.getSenders();
+            const videoTrack = localStream.getVideoTracks()[0];
+            const audioTrack = localStream.getAudioTracks()[0];
+            
+            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+            if (videoSender && videoTrack) videoSender.replaceTrack(videoTrack);
+            
+            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+            if (audioSender && audioTrack) audioSender.replaceTrack(audioTrack);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Could not flip camera.');
+    }
+}
+
+function toggleFullscreen() {
+    const el = document.getElementById('video-overlay');
+    if (!document.fullscreenElement) {
+        el.requestFullscreen().catch(err => console.error(err));
+    } else {
+        document.exitFullscreen();
+    }
+}
