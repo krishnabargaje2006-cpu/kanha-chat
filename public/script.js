@@ -131,6 +131,41 @@ socket.on('message-deleted', ({ messageId }) => {
     if (el) { el.innerHTML = 'This message was deleted'; el.className = 'message deleted'; }
 });
 
+// --- Call Signaling Events ---
+socket.on('incoming-call', ({ from }) => {
+    document.getElementById('caller-name').innerText = from.charAt(0).toUpperCase() + from.slice(1);
+    document.getElementById('caller-avatar').innerText = from.charAt(0).toUpperCase();
+    document.getElementById('incoming-call-modal').classList.remove('hidden');
+});
+
+socket.on('call-accepted', async () => {
+    await startCallUI();
+    await setupPeerConnection(true);
+});
+
+socket.on('call-declined', () => {
+    alert('Call declined.');
+    endCallUI();
+});
+
+socket.on('call-ended', () => endCallUI());
+
+socket.on('signal', async (data) => {
+    if (!peerConnection) await setupPeerConnection(false);
+    try {
+        if (data.signal.type === 'offer') {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit('signal', { roomId, sender: currentUser, signal: answer });
+        } else if (data.signal.type === 'answer') {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } else if (data.signal.candidate) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal));
+        }
+    } catch (err) { console.error(err); }
+});
+
 // --- UI Listeners ---
 function setupUIListeners() {
     const input = document.getElementById('message-input');
@@ -180,6 +215,26 @@ function setupUIListeners() {
         socket.emit('delete-message', { roomId, messageId: selectedMessageId, deleteFor: 'everyone' });
         document.getElementById('context-menu').classList.add('hidden');
     });
+
+    // Call UI Buttons
+    document.getElementById('accept-call-btn').addEventListener('click', async () => {
+        document.getElementById('incoming-call-modal').classList.add('hidden');
+        await startCallUI();
+        await setupPeerConnection(false);
+        socket.emit('call-accepted', { roomId, from: currentUser });
+    });
+    document.getElementById('decline-call-btn').addEventListener('click', () => {
+        document.getElementById('incoming-call-modal').classList.add('hidden');
+        socket.emit('call-declined', { roomId, from: currentUser });
+    });
+    document.getElementById('btn-end-call').addEventListener('click', () => {
+        socket.emit('call-ended', { roomId });
+        endCallUI();
+    });
+    document.getElementById('btn-mute').addEventListener('click', toggleMute);
+    document.getElementById('btn-toggle-cam').addEventListener('click', toggleCam);
+    document.getElementById('btn-flip-cam').addEventListener('click', flipCamera);
+    document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
 }
 
 // --- Replying ---
