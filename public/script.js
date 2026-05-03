@@ -109,6 +109,15 @@ socket.on('new-message', (msg) => {
 socket.on('peer-online',  () => setStatus('Online', true));
 socket.on('peer-offline', () => setStatus('Offline', false));
 
+socket.on('chat-cleared', () => {
+    const container = document.getElementById('chat-messages');
+    container.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'date-divider';
+    d.innerText = 'Chat cleared 🗑️';
+    container.appendChild(d);
+});
+
 socket.on('signal', async (data) => {
     if (!peerConnection) await setupPeerConnection(false);
     try {
@@ -147,10 +156,11 @@ if (currentUser && peerUser) initApp();
 
 // --- UI ---
 function setupUIListeners() {
-    const sendBtn  = document.getElementById('send-btn');
-    const msgInput = document.getElementById('message-input');
-    const videoBtn = document.getElementById('video-call-btn');
-    const endBtn   = document.getElementById('end-call-btn');
+    const sendBtn      = document.getElementById('send-btn');
+    const msgInput     = document.getElementById('message-input');
+    const videoBtn     = document.getElementById('video-call-btn');
+    const endBtn       = document.getElementById('end-call-btn');
+    const clearChatBtn = document.getElementById('clear-chat-btn');
 
     sendBtn.addEventListener('click', sendMessage);
     msgInput.addEventListener('keydown', (e) => {
@@ -160,6 +170,12 @@ function setupUIListeners() {
 
     videoBtn.addEventListener('click', () => startCall(true));
     endBtn.addEventListener('click', endCall);
+
+    clearChatBtn.addEventListener('click', () => {
+        if (confirm('Clear entire chat for both of you?')) {
+            socket.emit('clear-chat', { roomId });
+        }
+    });
 }
 
 function sendMessage() {

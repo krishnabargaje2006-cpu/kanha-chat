@@ -64,6 +64,13 @@ io.on('connection', (socket) => {
         io.to(data.roomId).emit('new-message', message);
     });
 
+    socket.on('clear-chat', (data) => {
+        if (messagesByRoom[data.roomId]) {
+            messagesByRoom[data.roomId] = [];
+        }
+        io.to(data.roomId).emit('chat-cleared');
+    });
+
     // WebRTC Signaling
     socket.on('signal', (data) => {
         socket.to(data.roomId).emit('signal', {
