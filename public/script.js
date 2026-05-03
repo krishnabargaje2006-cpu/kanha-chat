@@ -205,9 +205,50 @@ function setupUIListeners() {
         endCallUI();
     });
     document.getElementById('btn-mute').addEventListener('click', toggleMute);
+    document.getElementById('btn-speaker').addEventListener('click', toggleSpeaker);
     document.getElementById('btn-toggle-cam').addEventListener('click', toggleCam);
     document.getElementById('btn-flip-cam').addEventListener('click', flipCamera);
     document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+
+    // Make local video draggable
+    setupDraggableVideo();
+}
+
+function setupDraggableVideo() {
+    const localVid = document.getElementById('local-video');
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
+
+    localVid.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        startX = e.clientX; startY = e.clientY;
+        const rect = localVid.getBoundingClientRect();
+        
+        // Convert right/bottom positioning to explicit left/top for dragging
+        if (!localVid.style.left) {
+            localVid.style.left = rect.left + 'px';
+            localVid.style.top = rect.top + 'px';
+            localVid.style.right = 'auto';
+            localVid.style.bottom = 'auto';
+        }
+        
+        initialX = parseFloat(localVid.style.left);
+        initialY = parseFloat(localVid.style.top);
+        localVid.setPointerCapture(e.pointerId);
+    });
+
+    localVid.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        localVid.style.left = (initialX + dx) + 'px';
+        localVid.style.top = (initialY + dy) + 'px';
+    });
+
+    localVid.addEventListener('pointerup', (e) => {
+        isDragging = false;
+        localVid.releasePointerCapture(e.pointerId);
+    });
 }
 
 // --- Replying ---
@@ -456,4 +497,26 @@ function toggleFullscreen() {
     } else {
         document.exitFullscreen();
     }
+}
+
+let isSpeaker = true;
+async function toggleSpeaker() {
+    const btn = document.getElementById('btn-speaker');
+    const remoteVid = document.getElementById('remote-video');
+    
+    if (typeof remoteVid.setSinkId !== 'undefined') {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioOuts = devices.filter(d => d.kind === 'audiooutput');
+            if (audioOuts.length > 1) {
+                isSpeaker = !isSpeaker;
+                const sinkId = isSpeaker ? audioOuts[0].deviceId : audioOuts[1].deviceId;
+                await remoteVid.setSinkId(sinkId);
+                isSpeaker ? btn.classList.remove('off') : btn.classList.add('off');
+                return;
+            }
+        } catch (e) { console.error(e); }
+    }
+    // Fallback for mobile where JS can't easily force it
+    alert("On mobile devices, speaker routing is managed by your OS automatically. To force the earpiece, try turning off your camera.");
 }
