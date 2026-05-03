@@ -85,6 +85,40 @@ html, body { height: 100%; overflow: hidden; background-color: var(--bg-dark); c
 #login-error { color: var(--danger); font-size: 0.85rem; }
 .demo-links a { display: block; background: var(--primary); color: white; padding: 0.875rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; margin-bottom: 0.5rem; }
 
+/* Call Screens */
+.call-screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 500;
+    background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.call-content { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2rem; }
+.call-content h2 { font-size: 1.2rem; color: var(--text-dim); font-weight: 400; }
+.call-content h3 { font-size: 2rem; color: white; }
+.call-avatar-wrapper { position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; margin: 2rem 0; }
+.call-avatar {
+    width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #38bdf8, #0369a1);
+    display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: bold; color: white; z-index: 10;
+}
+.pulse-ring {
+    position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--primary);
+    animation: ripple 2s linear infinite; z-index: 1;
+}
+.pulse-ring.delay { animation-delay: 1s; }
+@keyframes ripple {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(1.8); opacity: 0; }
+}
+
+.modal-actions { margin-top: 2rem; display: flex; gap: 2rem; }
+.modal-actions button {
+    width: 64px; height: 64px; border-radius: 50%; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s;
+}
+.modal-actions button:hover { transform: scale(1.1); }
+.btn-decline { background: var(--danger); box-shadow: 0 0 20px rgba(239,68,68,0.4); }
+.btn-accept { background: var(--green); box-shadow: 0 0 20px rgba(34,197,94,0.4); }
+.pulse-green { animation: pulseGreen 2s infinite; }
+@keyframes pulseGreen { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); } 70% { box-shadow: 0 0 0 20px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+
 /* WebRTC Overlays (Condensed for space) */
 #video-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:400; display:flex; flex-direction:column; justify-content:space-between; }
 #remote-video { position:absolute; width:100%; height:100%; object-fit:cover; }

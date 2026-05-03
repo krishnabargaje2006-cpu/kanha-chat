@@ -139,16 +139,23 @@ socket.on('incoming-call', ({ from }) => {
 });
 
 socket.on('call-accepted', async () => {
+    document.getElementById('outgoing-status').innerText = 'Connecting...';
     await startCallUI();
     await setupPeerConnection(true);
 });
 
 socket.on('call-declined', () => {
-    alert('Call declined.');
-    endCallUI();
+    document.getElementById('outgoing-status').innerText = 'Call Declined';
+    setTimeout(() => {
+        document.getElementById('outgoing-call-modal').classList.add('hidden');
+    }, 2000);
 });
 
-socket.on('call-ended', () => endCallUI());
+socket.on('call-ended', () => {
+    document.getElementById('outgoing-call-modal').classList.add('hidden');
+    document.getElementById('incoming-call-modal').classList.add('hidden');
+    endCallUI();
+});
 
 socket.on('signal', async (data) => {
     if (!peerConnection) await setupPeerConnection(false);
@@ -367,10 +374,20 @@ function showLightbox(src) { document.getElementById('lightbox-img').src = src; 
 // --- Video Call Logic ---
 document.getElementById('video-call-btn').addEventListener('click', () => {
     socket.emit('call-request', { roomId, from: currentUser });
-    alert(`Calling ${peerUser.charAt(0).toUpperCase() + peerUser.slice(1)}... Waiting for them to accept.`);
+    document.getElementById('outgoing-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
+    document.getElementById('outgoing-avatar').innerText = peerUser.charAt(0).toUpperCase();
+    document.getElementById('outgoing-status').innerText = 'Calling...';
+    document.getElementById('outgoing-call-modal').classList.remove('hidden');
+});
+
+document.getElementById('cancel-call-btn').addEventListener('click', () => {
+    socket.emit('call-ended', { roomId });
+    document.getElementById('outgoing-call-modal').classList.add('hidden');
 });
 
 async function startCallUI() {
+    document.getElementById('outgoing-call-modal').classList.add('hidden');
+    document.getElementById('incoming-call-modal').classList.add('hidden');
     document.getElementById('video-overlay').classList.remove('hidden');
     document.getElementById('call-peer-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
     

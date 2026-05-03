@@ -111,15 +111,47 @@
     <button id="ctx-delete-all">🗑️ Delete for Everyone</button>
 </div>
 
-<!-- Incoming Call Modal -->
-<div id="incoming-call-modal" class="modal-overlay hidden">
-    <div class="modal-card">
-        <div class="call-avatar" id="caller-avatar">?</div>
-        <h3 id="caller-name">Someone</h3>
-        <p>is calling you...</p>
+<!-- Outgoing Call Modal -->
+<div id="outgoing-call-modal" class="call-screen hidden">
+    <div class="call-content">
+        <h2 id="outgoing-status">Calling...</h2>
+        <div class="call-avatar-wrapper">
+            <div class="call-avatar" id="outgoing-avatar">?</div>
+            <div class="pulse-ring"></div>
+            <div class="pulse-ring delay"></div>
+        </div>
+        <h3 id="outgoing-name">Someone</h3>
         <div class="modal-actions">
-            <button id="accept-call-btn" class="btn-accept">Accept</button>
-            <button id="decline-call-btn" class="btn-decline">Decline</button>
+            <button id="cancel-call-btn" class="btn-decline">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Incoming Call Modal -->
+<div id="incoming-call-modal" class="call-screen hidden">
+    <div class="call-content">
+        <h2>Incoming Video Call</h2>
+        <div class="call-avatar-wrapper">
+            <div class="call-avatar" id="caller-avatar">?</div>
+            <div class="pulse-ring"></div>
+            <div class="pulse-ring delay"></div>
+        </div>
+        <h3 id="caller-name">Someone</h3>
+        <div class="modal-actions dual">
+            <button id="decline-call-btn" class="btn-decline">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/>
+                </svg>
+            </button>
+            <button id="accept-call-btn" class="btn-accept pulse-green">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/>
+                </svg>
+            </button>
         </div>
     </div>
 </div>
