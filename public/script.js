@@ -189,22 +189,17 @@ function sendMessage() {
     if (!text || !socket.connected) return;
     
     const replyData = replyingTo ? { ...replyingTo } : null;
-    socket.emit('send-message', { roomId, text, sender: currentUser, type: 'text', replyTo: replyData }, (ack) => {
-        // Ack from server = 1 tick
-        const tickEl = document.getElementById(`ticks-${ack.id}`);
+    const msgId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+    
+    socket.emit('send-message', { id: msgId, roomId, text, sender: currentUser, type: 'text', replyTo: replyData }, (ack) => {
+        const tickEl = document.getElementById(`ticks-${msgId}`);
         if (tickEl) { tickEl.innerText = '✓'; tickEl.className = 'ticks sent'; }
     });
     
-    // Add locally immediately with clock icon (pending)
     const localMsg = {
-        id: 'temp-' + Date.now(),
+        id: msgId,
         sender: currentUser, text: text, type: 'text', replyTo: replyData, status: 'pending', timestamp: new Date()
     };
-    // (In a full app we'd replace temp-ID with real ID, here we trust the server roundtrip is fast enough to just wait for the broadcast/ack)
-    // Actually, because we emit and the server broadcasts to US too? No, server does `socket.to(roomId)`.
-    // We need to render it locally!
-    // Wait, the original code didn't render locally, it relied on server broadcast? No, original didn't use `socket.to`. Original used `io.to`.
-    // Let's render it locally:
     addMessageToUI(localMsg);
     
     socket.emit('stop-typing', { roomId, user: currentUser });
@@ -219,14 +214,15 @@ function handleFileUpload(e) {
     const reader = new FileReader();
     reader.onload = () => {
         const type = file.type.startsWith('image/') ? 'image' : 'file';
-        socket.emit('send-message', { roomId, sender: currentUser, type, fileName: file.name, fileData: reader.result }, (ack) => {
-             const tickEl = document.getElementById(`ticks-${ack.id}`);
+        const msgId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+        
+        socket.emit('send-message', { id: msgId, roomId, sender: currentUser, type, fileName: file.name, fileData: reader.result }, (ack) => {
+             const tickEl = document.getElementById(`ticks-${msgId}`);
              if(tickEl){ tickEl.innerText = '✓'; tickEl.className = 'ticks sent'; }
         });
         
-        // Add locally
         addMessageToUI({
-            id: 'temp-' + Date.now(), sender: currentUser, type, fileName: file.name, fileData: reader.result, status: 'pending', timestamp: new Date()
+            id: msgId, sender: currentUser, type, fileName: file.name, fileData: reader.result, status: 'pending', timestamp: new Date()
         });
         scrollToBottom();
     };
@@ -237,10 +233,7 @@ function handleFileUpload(e) {
 function addMessageToUI(msg) {
     const container = document.getElementById('chat-messages');
     
-    // If it's our own message coming from init-messages or we already rendered temp, handle it.
-    // To prevent dupes, if we rely on local render + ack, we just use local render.
-    // If msg is from init-messages, render it.
-    if (msg.id.startsWith('temp-') === false && document.querySelector(`.message[data-id="${msg.id}"]`)) return;
+    if (document.querySelector(`.message[data-id="${msg.id}"]`)) return;
 
     const isMine = msg.sender === currentUser;
     const div = document.createElement('div');
