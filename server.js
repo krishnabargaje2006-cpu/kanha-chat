@@ -15,32 +15,10 @@ const PORT = process.env.PORT || 3001;
 
 // In-memory data stores (Note: Resets on server sleep in Render free tier)
 const messagesByRoom = {};
-const userPasswords = {}; // stores: { 'bhavnesh': 'mypass', 'snehal': 'herpass' }
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
-
-// Auth Endpoint: Set password on first login, check password on subsequent logins
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-    
-    const userKey = username.toLowerCase().trim();
-    
-    if (!userPasswords[userKey]) {
-        // First time login - set password
-        userPasswords[userKey] = password;
-        return res.json({ success: true, message: 'Password set successfully!' });
-    } else {
-        // Subsequent login - verify password
-        if (userPasswords[userKey] === password) {
-            return res.json({ success: true });
-        } else {
-            return res.status(401).json({ error: 'Incorrect password' });
-        }
-    }
-});
 
 function getMessages(roomId) { return messagesByRoom[roomId] || []; }
 function saveMessage(msg) {

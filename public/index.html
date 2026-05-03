@@ -12,7 +12,7 @@
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-<div id="app" class="hidden"> <!-- App is hidden until logged in -->
+<div id="app"> <!-- App is hidden until logged in -->
 
     <!-- Header -->
     <header class="chat-header">
@@ -77,19 +77,6 @@
         </div>
     </footer>
 
-</div>
-
-<!-- Login Overlay -->
-<div id="login-overlay" class="modal-overlay hidden">
-    <div class="setup-card">
-        <h1>🔒 Enter Password</h1>
-        <p id="login-welcome-text">Set a password for your account.</p>
-        <div class="login-form">
-            <input type="password" id="login-password" placeholder="Password" />
-            <div id="login-error" class="hidden">Incorrect password!</div>
-            <button id="login-btn">Enter Chat</button>
-        </div>
-    </div>
 </div>
 
 <!-- Setup Overlay -->

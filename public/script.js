@@ -36,41 +36,7 @@ if (!currentUser || !peerUser) {
     document.getElementById('peer-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
     document.getElementById('peer-avatar').innerText = peerUser.charAt(0).toUpperCase();
     
-    // Show Login
-    document.getElementById('login-overlay').classList.remove('hidden');
-    document.getElementById('login-password').focus();
-    document.getElementById('login-btn').addEventListener('click', attemptLogin);
-    document.getElementById('login-password').addEventListener('keydown', (e) => {
-        if(e.key === 'Enter') attemptLogin();
-    });
-}
-
-async function attemptLogin() {
-    const password = document.getElementById('login-password').value;
-    const errEl = document.getElementById('login-error');
-    if (!password) return;
-    
-    try {
-        const res = await fetch('/api/login', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUser, password })
-        });
-        const data = await res.json();
-        if (data.success) {
-            document.getElementById('login-overlay').classList.add('hidden');
-            document.getElementById('app').classList.remove('hidden');
-            startApp();
-        } else {
-            errEl.innerText = data.error;
-            errEl.classList.remove('hidden');
-        }
-    } catch (e) {
-        errEl.innerText = 'Network error. Try again.';
-        errEl.classList.remove('hidden');
-    }
-}
-
-function startApp() {
+    // Connect immediately without login
     socket.connect();
     setupUIListeners();
 }
