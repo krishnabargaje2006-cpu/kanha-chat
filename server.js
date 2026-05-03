@@ -2,42 +2,38 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: { origin: '*' },
+    transports: ['websocket', 'polling']
+});
 
 const PORT = process.env.PORT || 3001;
-const MESSAGES_FILE = path.join(__dirname, 'messages.json');
 
-// Initialize messages file if not exists
-if (!fs.existsSync(MESSAGES_FILE)) {
-    fs.writeFileSync(MESSAGES_FILE, JSON.stringify([]));
+// In-memory storage — works on any host including Render free tier
+const messagesByRoom = {};
+
+function getMessages(roomId) {
+    return messagesByRoom[roomId] || [];
+}
+
+function saveMessage(msg) {
+    if (!messagesByRoom[msg.roomId]) {
+        messagesByRoom[msg.roomId] = [];
+    }
+    messagesByRoom[msg.roomId].push(msg);
+    // Keep only last 200 messages per room
+    if (messagesByRoom[msg.roomId].length > 200) {
+        messagesByRoom[msg.roomId].shift();
+    }
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-function getMessages(roomId) {
-    try {
-        const data = fs.readFileSync(MESSAGES_FILE, 'utf8');
-        const allMessages = JSON.parse(data);
-        return allMessages.filter(m => m.roomId === roomId);
-    } catch (err) {
-        return [];
-    }
-}
-
-function saveMessage(msg) {
-    try {
-        const data = fs.readFileSync(MESSAGES_FILE, 'utf8');
-        const allMessages = JSON.parse(data);
-        allMessages.push(msg);
-        fs.writeFileSync(MESSAGES_FILE, JSON.stringify(allMessages, null, 2));
-    } catch (err) {
-        console.error("Error saving message:", err);
-    }
-}
+// Health check route (keeps Render free instance alive if pinged)
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
@@ -45,10 +41,15 @@ io.on('connection', (socket) => {
     socket.on('join-room', (data) => {
         const { user, peer, roomId } = data;
         socket.join(roomId);
+        socket.data.user = user;
+        socket.data.roomId = roomId;
         console.log(`${user} joined room: ${roomId}`);
-        
-        // Send history for this room
+
+        // Send existing messages for this room
         socket.emit('init-messages', getMessages(roomId));
+        
+        // Notify peer that user is online
+        socket.to(roomId).emit('peer-online', { user });
     });
 
     socket.on('send-message', (data) => {
@@ -65,19 +66,19 @@ io.on('connection', (socket) => {
 
     // WebRTC Signaling
     socket.on('signal', (data) => {
-        // Broadcast to others in the room
         socket.to(data.roomId).emit('signal', {
             sender: data.sender,
             signal: data.signal
         });
     });
 
-    socket.on('call-user', (data) => {
-        socket.to(data.roomId).emit('incoming-call', { from: data.from });
-    });
-
     socket.on('disconnect', () => {
-        console.log('User disconnected');
+        const roomId = socket.data.roomId;
+        const user = socket.data.user;
+        if (roomId) {
+            socket.to(roomId).emit('peer-offline', { user });
+        }
+        console.log('User disconnected:', user);
     });
 });
 
