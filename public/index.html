@@ -14,6 +14,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Early selectUser definition to avoid "not defined" errors on slow loads
+        window.selectUser = function(user, peer) {
+            if (typeof initApp === 'function') {
+                initApp(user, peer);
+            } else {
+                console.log("App not ready yet...");
+                // Store choice to apply once script.js loads
+                window.pendingUserChoice = { user, peer };
+            }
+        };
+    </script>
 </head>
 <body>
 

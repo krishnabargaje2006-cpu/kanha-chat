@@ -49,7 +49,7 @@ let localStream = null;
    AUTH & INITIALIZATION
 ============================================================ */
 
-window.selectUser = function(user, peer) {
+window.initApp = function(user, peer) {
     currentUser = user.toLowerCase().trim();
     peerUser = peer.toLowerCase().trim();
     roomId = [currentUser, peerUser].sort().join('-');
@@ -66,13 +66,17 @@ window.selectUser = function(user, peer) {
     if (!socket.connected) {
         socket.connect();
     } else {
-        // If already connected for some reason, join room immediately
         socket.emit('join-room', { user: currentUser, peer: peerUser, roomId });
     }
     
     setupUIListeners();
     showToast(`Logged in as ${currentUser}`);
 };
+
+// Check if user clicked before script loaded
+if (window.pendingUserChoice) {
+    window.initApp(window.pendingUserChoice.user, window.pendingUserChoice.peer);
+}
 
 document.getElementById('logout-btn').addEventListener('click', () => {
     if (confirm('Switch user?')) {
