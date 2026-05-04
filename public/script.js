@@ -108,8 +108,21 @@ socket.on('connect', () => {
     document.getElementById('status').innerText = 'Online';
     document.getElementById('status').classList.add('online');
     document.getElementById('peer-dot').classList.add('online');
-    socket.emit('join-room', { user: currentUser, peer: peerUser, roomId });
+    
+    // Force join room on connect
+    if (currentUser && peerUser && roomId) {
+        console.log("Emitting join-room for", currentUser);
+        socket.emit('join-room', { user: currentUser, peer: peerUser, roomId });
+    }
 });
+
+// Reconnection heartbeat
+setInterval(() => {
+    if (currentUser && !socket.connected) {
+        console.log("Heartbeat: Socket disconnected, attempting reconnect...");
+        socket.connect();
+    }
+}, 5000);
 
 socket.on('disconnect', () => {
     document.getElementById('connecting-banner').classList.remove('hidden');

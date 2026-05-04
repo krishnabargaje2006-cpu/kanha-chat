@@ -70,23 +70,23 @@ io.on('connection', (socket) => {
     // Messaging
     socket.on('send-message', (data, callback) => {
         const message = {
-            id: Date.now().toString(),
+            id: data.id || Date.now().toString(), // Use client ID if provided
             roomId: data.roomId,
             text: data.text || '',
             sender: data.sender,
             type: data.type || 'text',
             fileName: data.fileName || '',
             fileData: data.fileData || '',
-            replyTo: data.replyTo || null, // { id, text, sender }
-            status: 'sent', // sent, delivered, read
+            replyTo: data.replyTo || null,
+            status: 'sent',
             timestamp: new Date().toISOString()
         };
         saveMessage(message);
         
+        console.log(`Forwarding message from [${data.sender}] to room [${data.roomId}]`);
         // Send to everyone else in room
         socket.to(data.roomId).emit('new-message', message);
         
-        // Callback to sender to confirm it hit the server (single tick)
         if (callback) callback({ status: 'sent', id: message.id });
     });
 
