@@ -47,6 +47,10 @@ window.initApp = function(user, peer) {
     peerUser = peer.toLowerCase().trim();
     roomId = [currentUser, peerUser].sort().join('-');
 
+    // Save to localStorage for persistence (Like WhatsApp)
+    localStorage.setItem('chat_user', currentUser);
+    localStorage.setItem('chat_peer', peerUser);
+
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     
@@ -54,10 +58,29 @@ window.initApp = function(user, peer) {
     document.getElementById('peer-avatar').innerText = peerUser.charAt(0).toUpperCase();
     document.getElementById('self-name-badge').innerText = `You: ${currentUser.charAt(0).toUpperCase() + currentUser.slice(1)}`;
 
+    // Load cached messages while connecting
+    const cached = localStorage.getItem(`cache_${roomId}`);
+    if (cached) {
+        const msgs = JSON.parse(cached);
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('chat-messages').innerHTML = '';
+        msgs.forEach(addMessageToUI);
+        scrollToBottom();
+    }
+
     socket.connect();
     setupUIListeners();
-    showToast(`Logged in as ${currentUser}`);
+    showToast(`Welcome back, ${currentUser}`);
 };
+
+// Auto-Login on startup
+window.addEventListener('load', () => {
+    const savedUser = localStorage.getItem('chat_user');
+    const savedPeer = localStorage.getItem('chat_peer');
+    if (savedUser && savedPeer) {
+        window.initApp(savedUser, savedPeer);
+    }
+});
 
 if (window.pendingUserChoice) {
     window.initApp(window.pendingUserChoice.user, window.pendingUserChoice.peer);
@@ -66,6 +89,7 @@ if (window.pendingUserChoice) {
 document.getElementById('logout-btn').addEventListener('click', () => {
     if (confirm('Switch user?')) {
         socket.disconnect();
+        localStorage.clear();
         window.location.reload();
     }
 });
@@ -110,6 +134,8 @@ socket.on('init-messages', (msgs) => {
         document.getElementById('empty-state').classList.add('hidden');
         msgs.forEach(addMessageToUI);
         scrollToBottom();
+        // Update local cache
+        localStorage.setItem(`cache_${roomId}`, JSON.stringify(msgs));
     }
 });
 
@@ -117,6 +143,12 @@ socket.on('new-message', (msg) => {
     document.getElementById('empty-state').classList.add('hidden');
     addMessageToUI(msg);
     scrollToBottom();
+    
+    // Update local cache
+    const cached = JSON.parse(localStorage.getItem(`cache_${roomId}`) || '[]');
+    cached.push(msg);
+    localStorage.setItem(`cache_${roomId}`, JSON.stringify(cached.slice(-200)));
+
     if (msg.sender !== currentUser) {
         socket.emit('message-status-update', { roomId, messageId: msg.id, status: 'read' });
         playMessageSound();
