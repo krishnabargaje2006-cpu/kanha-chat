@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 
+const fs = require('fs');
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -13,8 +15,27 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// In-memory data stores (Note: Resets on server sleep in Render free tier)
-const messagesByRoom = {};
+// Path to store messages
+const DATA_FILE = path.join(__dirname, 'messages.json');
+
+// Helper to load messages from file
+function loadData() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+        }
+    } catch (e) { console.error("Error loading data:", e); }
+    return {};
+}
+
+// Helper to save messages to file
+function saveData(data) {
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    } catch (e) { console.error("Error saving data:", e); }
+}
+
+const messagesByRoom = loadData();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -25,6 +46,7 @@ function saveMessage(msg) {
     if (!messagesByRoom[msg.roomId]) messagesByRoom[msg.roomId] = [];
     messagesByRoom[msg.roomId].push(msg);
     if (messagesByRoom[msg.roomId].length > 300) messagesByRoom[msg.roomId].shift();
+    saveData(messagesByRoom);
 }
 
 io.on('connection', (socket) => {
