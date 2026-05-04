@@ -177,37 +177,44 @@ socket.on('peer-stop-typing', () => document.getElementById('typing-indicator').
 ============================================================ */
 
 function sendMessage() {
-    const input = document.getElementById('message-input');
-    const text = input.value.trim();
-    if (!text) return;
-    
-    const msgId = 'm-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
-    const msg = {
-        id: msgId, 
-        roomId, 
-        text, 
-        sender: currentUser, 
-        type: 'text', 
-        replyTo: replyingTo ? { ...replyingTo } : null,
-        status: 'pending', 
-        timestamp: new Date()
-    };
-    
-    // Optimistic UI Update (Immediate)
-    document.getElementById('empty-state').classList.add('hidden');
-    addMessageToUI(msg);
-    scrollToBottom();
-    
-    // Clear input immediately
-    input.value = '';
-    clearReply();
-    
-    // Send or Queue
-    if (socket.connected) {
-        emitMessage(msg);
-    } else {
-        messageQueue.push(msg);
-        showToast('Offline: Message queued...');
+    try {
+        const input = document.getElementById('message-input');
+        const text = input.value.trim();
+        if (!text) return;
+        
+        const msgId = 'm-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+        const msg = {
+            id: msgId, 
+            roomId, 
+            text, 
+            sender: currentUser, 
+            type: 'text', 
+            replyTo: replyingTo ? { ...replyingTo } : null,
+            status: 'pending', 
+            timestamp: new Date().toISOString()
+        };
+        
+        // Clear UI immediately for speed
+        input.value = '';
+        input.style.height = 'auto';
+        clearReply();
+        
+        // Optimistic UI Update
+        document.getElementById('empty-state').classList.add('hidden');
+        addMessageToUI(msg);
+        scrollToBottom();
+        
+        // Send or Queue
+        if (socket.connected) {
+            emitMessage(msg);
+        } else {
+            messageQueue.push(msg);
+            showToast('Message will send when online...');
+            socket.connect(); // Force reconnect attempt
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Error sending message. Please refresh.');
     }
 }
 
