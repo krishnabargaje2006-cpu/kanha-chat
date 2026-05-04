@@ -1,3 +1,10 @@
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(reg => console.log('SW Registered')).catch(err => console.log('SW Error', err));
+    });
+}
+
 // Mobile keyboard fix
 function setVH() { 
     document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); 
@@ -68,6 +75,15 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     }
 });
 
+document.getElementById('share-btn').addEventListener('click', () => {
+    const url = window.location.origin;
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('Link copied! Share it with your friend.');
+    }).catch(() => {
+        showToast('Could not copy link. Copy manually.');
+    });
+});
+
 /* ============================================================
    SOCKET EVENTS
 ============================================================ */
@@ -112,10 +128,25 @@ socket.on('new-message', (msg) => {
     
     if (msg.sender !== currentUser) {
         socket.emit('message-status-update', { roomId, messageId: msg.id, status: 'read' });
+        playMessageSound();
         // Vibration if supported
         if (navigator.vibrate) navigator.vibrate(100);
     }
 });
+
+function playMessageSound() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+}
 
 socket.on('message-status-changed', ({ messageId, status }) => {
     const el = document.getElementById(`ticks-${messageId}`);
