@@ -36,7 +36,12 @@ const ICE_CONFIG = {
 };
 
 // Socket & WebRTC
-const socket = io({ autoConnect: false, transports: ['websocket', 'polling'] });
+const socket = io({ 
+    autoConnect: false, 
+    transports: ['polling', 'websocket'], // Polling first is more stable for tunnels
+    reconnection: true,
+    reconnectionDelay: 1000
+});
 let peerConnection = null; 
 let localStream = null;
 
@@ -45,8 +50,8 @@ let localStream = null;
 ============================================================ */
 
 window.selectUser = function(user, peer) {
-    currentUser = user;
-    peerUser = peer;
+    currentUser = user.toLowerCase().trim();
+    peerUser = peer.toLowerCase().trim();
     roomId = [currentUser, peerUser].sort().join('-');
 
     // UI Updates
@@ -57,8 +62,14 @@ window.selectUser = function(user, peer) {
     document.getElementById('peer-avatar').innerText = peerUser.charAt(0).toUpperCase();
     document.getElementById('self-name-badge').innerText = `You: ${currentUser.charAt(0).toUpperCase() + currentUser.slice(1)}`;
 
-    // Connect
-    socket.connect();
+    // Connect and Join
+    if (!socket.connected) {
+        socket.connect();
+    } else {
+        // If already connected for some reason, join room immediately
+        socket.emit('join-room', { user: currentUser, peer: peerUser, roomId });
+    }
+    
     setupUIListeners();
     showToast(`Logged in as ${currentUser}`);
 };

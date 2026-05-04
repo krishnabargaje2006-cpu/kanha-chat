@@ -53,12 +53,16 @@ io.on('connection', (socket) => {
     console.log('Connected:', socket.id);
 
     socket.on('join-room', ({ user, peer, roomId }) => {
+        console.log(`User [${user}] joining room [${roomId}] for peer [${peer}]`);
         socket.join(roomId);
         socket.data.user = user;
         socket.data.roomId = roomId;
         
         // Send existing messages
-        socket.emit('init-messages', getMessages(roomId));
+        const roomMessages = getMessages(roomId);
+        console.log(`Sending ${roomMessages.length} existing messages to ${user}`);
+        socket.emit('init-messages', roomMessages);
+        
         // Notify peer we are online
         socket.to(roomId).emit('peer-online', { user });
     });
