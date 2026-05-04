@@ -91,7 +91,12 @@ if (!currentUser || !peerUser) {
     roomId = [currentUser, peerUser].sort().join('-');
     document.getElementById('peer-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
     document.getElementById('peer-avatar').innerText = peerUser.charAt(0).toUpperCase();
-    
+
+    // Show "You: Kanha" badge so user knows which side they are
+    const selfBadge = document.getElementById('self-badge');
+    document.getElementById('self-name').innerText = currentUser.charAt(0).toUpperCase() + currentUser.slice(1);
+    selfBadge.style.display = 'flex';
+
     // Connect immediately without login
     socket.connect();
     setupUIListeners();
