@@ -127,6 +127,9 @@ socket.on('init-messages', (msgs) => {
 socket.on('new-message', (msg) => {
     addMessageToUI(msg);
     scrollToBottom();
+    if (msg.sender === 'swaruu' && msg.sender !== currentUser) {
+        alert('1 new message from swaruu');
+    }
     // Automatically send 'read' receipt since we are in the chat
     if (msg.sender !== currentUser) {
         socket.emit('message-status-update', { roomId, messageId: msg.id, status: 'read' });
@@ -141,7 +144,7 @@ socket.on('message-status-changed', ({ messageId, status }) => {
     }
 });
 
-socket.on('peer-online',  () => { document.getElementById('status').innerText = 'Online'; document.getElementById('status').classList.add('online'); });
+socket.on('peer-online',  ({ user }) => { document.getElementById('status').innerText = 'Online'; document.getElementById('status').classList.add('online'); alert((user || peerUser) + ' has joined the chat!'); });
 socket.on('peer-offline', () => { document.getElementById('status').innerText = 'Offline'; document.getElementById('status').classList.remove('online'); });
 
 socket.on('peer-typing', () => document.getElementById('typing-indicator').classList.remove('hidden'));

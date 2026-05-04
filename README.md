@@ -1,4 +1,4 @@
-# Bhavnesh & Snehal Chat - Technical Architecture Documentation
+# Swaruu & Kanha Chat - Technical Architecture Documentation
 
 A highly optimized, real-time, peer-to-peer communication platform built exclusively for two users. This project implements advanced networking protocols (WebSockets & WebRTC) using a lightweight vanilla technology stack to ensure zero-latency communication, direct media streaming, and robust state management.
 
@@ -22,7 +22,7 @@ The system is built on a **Client-Server-Client** model for text and media, and 
 **Where it's used:** `server.js` and `public/script.js`
 **How it works:**
 Unlike traditional HTTP requests where the client must constantly "ask" the server for new data, WebSockets maintain an open, persistent tunnel. 
-*   **Rooms:** When a user connects (`/?user=bhavnesh&peer=snehal`), the server dynamically creates a unique "Room ID" by alphabetically sorting the two names (`bhavnesh-snehal`). Both users are placed in this isolated Socket.io room.
+*   **Rooms:** When a user connects (`/?user=swaruu&peer=kanha`), the server dynamically creates a unique "Room ID" by alphabetically sorting the two names (`kanha-swaruu`). Both users are placed in this isolated Socket.io room.
 *   **The Message Flow:**
     1. User A types a message and hits send. The client generates a mathematically unique `msgId`.
     2. The client emits a `send-message` event to the server.
