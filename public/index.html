@@ -3,61 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="theme-color" content="#0f172a">
-    <title>Chat</title>
+    <meta name="theme-color" content="#0a0a1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Private encrypted chat app for Swaruu & Kanha">
+    <title>Chat — Swaruu & Kanha</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-<div id="app"> <!-- App is hidden until logged in -->
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="login-screen">
+    <div class="login-bg">
+        <div class="orb orb1"></div>
+        <div class="orb orb2"></div>
+        <div class="orb orb3"></div>
+    </div>
+    <div class="login-content">
+        <div class="login-logo">
+            <div class="logo-icon">💬</div>
+            <h1>ChatApp</h1>
+            <p>Your private space to connect</p>
+        </div>
+        <div class="login-subtitle">
+            <span class="lock-badge">🔒 End-to-End Encrypted</span>
+        </div>
+        <p class="who-text">Who are you?</p>
+        <div class="user-cards">
+            <button class="user-card" id="card-swaruu" onclick="selectUser('swaruu','kanha')">
+                <div class="user-card-avatar gradient-a">S</div>
+                <div class="user-card-info">
+                    <span class="user-card-name">Swaruu</span>
+                    <span class="user-card-role">User 1</span>
+                </div>
+                <svg class="user-card-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <button class="user-card" id="card-kanha" onclick="selectUser('kanha','swaruu')">
+                <div class="user-card-avatar gradient-b">K</div>
+                <div class="user-card-info">
+                    <span class="user-card-name">Kanha</span>
+                    <span class="user-card-role">User 2</span>
+                </div>
+                <svg class="user-card-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+        </div>
+        <p class="login-footer">Tap your name to enter the chat</p>
+    </div>
+</div>
+
+<!-- ============ CHAT APP ============ -->
+<div id="app" class="hidden">
 
     <!-- Header -->
     <header class="chat-header">
         <div class="user-info">
-            <div class="avatar" id="peer-avatar">?</div>
+            <div class="avatar-wrap">
+                <div class="avatar" id="peer-avatar">?</div>
+                <span class="online-dot" id="peer-dot"></span>
+            </div>
             <div class="details">
                 <h2 id="peer-name">Connecting...</h2>
-                <div style="font-size:0.65rem; color:#22c55e; display:flex; align-items:center; gap:0.2rem; margin-bottom:0.1rem;">
-                    <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                    Secure Online Chat
+                <div class="status-row">
+                    <span class="secure-badge">🔒 Secure</span>
+                    <span id="status">Connecting</span>
+                    <span id="typing-indicator" class="hidden">typing...</span>
                 </div>
-                <span id="status">Connecting</span>
-                <span id="typing-indicator" class="hidden">typing...</span>
             </div>
         </div>
-        <div id="self-badge" style="font-size:0.7rem; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); color:#38bdf8; padding:0.2rem 0.6rem; border-radius:999px; display:none; align-items:center; gap:0.25rem;">
-            <span style="font-size:0.6rem;">👤</span>
-            You: <strong id="self-name"></strong>
-        </div>
-        <div class="header-actions">
-            <button id="clear-chat-btn" title="Clear Chat">
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                    <path d="M10 11v6"></path><path d="M14 11v6"></path>
-                    <path d="M9 6V4h6v2"></path>
-                </svg>
-            </button>
-            <button id="video-call-btn" title="Start Video Call">
-                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M23 7l-7 5 7 5V7z"></path>
-                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                </svg>
-            </button>
+        <div class="header-right">
+            <div id="self-badge">
+                <span id="self-name-badge"></span>
+            </div>
+            <div class="header-actions">
+                <button id="clear-chat-btn" title="Clear Chat" class="icon-btn">
+                    <svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                        <path d="M10 11v6"></path><path d="M14 11v6"></path>
+                        <path d="M9 6V4h6v2"></path>
+                    </svg>
+                </button>
+                <button id="video-call-btn" title="Start Video Call" class="icon-btn">
+                    <svg viewBox="0 0 24 24" width="21" height="21" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 7l-7 5 7 5V7z"></path>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                </button>
+                <button id="logout-btn" title="Switch User" class="icon-btn">
+                    <svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
         </div>
     </header>
 
-    <!-- Connection banner -->
-    <div id="connecting-banner">Connecting to server...</div>
+    <!-- Connection Banner -->
+    <div id="connecting-banner" class="hidden">
+        <span>⟳ Reconnecting...</span>
+    </div>
 
     <!-- Chat Messages -->
-    <main id="chat-messages" role="log" aria-live="polite"></main>
+    <main id="chat-messages" role="log" aria-live="polite">
+        <div class="chat-empty-state" id="empty-state">
+            <div class="empty-icon">💬</div>
+            <p>Send a message to start chatting!</p>
+        </div>
+    </main>
 
-    <!-- Reply Preview Box -->
+    <!-- Reply Preview -->
     <div id="reply-preview" class="hidden">
+        <div class="reply-bar"></div>
         <div class="reply-content">
             <div class="reply-sender" id="reply-sender-name"></div>
             <div class="reply-text" id="reply-text-content"></div>
@@ -74,7 +137,7 @@
                 </svg>
             </button>
             <input type="file" id="file-input" accept="image/*,video/*,.pdf,.doc,.docx,.zip" style="display:none">
-            <input type="text" id="message-input" placeholder="Message..."
+            <input type="text" id="message-input" placeholder="Type a message..."
                 autocomplete="off" autocorrect="off" autocapitalize="sentences"
                 spellcheck="true" enterkeyhint="send">
             <button id="send-btn">
@@ -84,30 +147,18 @@
             </button>
         </div>
     </footer>
-
-</div>
-
-<!-- Setup Overlay -->
-<div id="setup-overlay" class="modal-overlay hidden">
-    <div class="setup-card">
-        <h1>💬 Chat App</h1>
-        <p>Open your personalized link to start chatting.</p>
-        <div class="demo-links">
-            <a href="/?user=swaruu&peer=kanha">I'm Swaruu 👨</a>
-            <a href="/?user=kanha&peer=swaruu">I'm Kanha 👩</a>
-        </div>
-    </div>
 </div>
 
 <!-- Context Menu -->
 <div id="context-menu" class="hidden">
-    <button id="ctx-reply">↩️ Reply</button>
-    <button id="ctx-delete-me">🗑️ Delete for Me</button>
-    <button id="ctx-delete-all">🗑️ Delete for Everyone</button>
+    <button id="ctx-reply">↩ Reply</button>
+    <button id="ctx-delete-me">🗑 Delete for Me</button>
+    <button id="ctx-delete-all">🗑 Delete for Everyone</button>
 </div>
 
 <!-- Outgoing Call Modal -->
 <div id="outgoing-call-modal" class="call-screen hidden">
+    <div class="call-bg-blur"></div>
     <div class="call-content">
         <h2 id="outgoing-status">Calling...</h2>
         <div class="call-avatar-wrapper">
@@ -118,9 +169,7 @@
         <h3 id="outgoing-name">Someone</h3>
         <div class="modal-actions">
             <button id="cancel-call-btn" class="btn-decline">
-                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/>
-                </svg>
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/></svg>
             </button>
         </div>
     </div>
@@ -128,6 +177,7 @@
 
 <!-- Incoming Call Modal -->
 <div id="incoming-call-modal" class="call-screen hidden">
+    <div class="call-bg-blur"></div>
     <div class="call-content">
         <h2>Incoming Video Call</h2>
         <div class="call-avatar-wrapper">
@@ -137,16 +187,18 @@
         </div>
         <h3 id="caller-name">Someone</h3>
         <div class="modal-actions dual">
-            <button id="decline-call-btn" class="btn-decline">
-                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/>
-                </svg>
-            </button>
-            <button id="accept-call-btn" class="btn-accept pulse-green">
-                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/>
-                </svg>
-            </button>
+            <div class="call-action-wrap">
+                <button id="decline-call-btn" class="btn-decline">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/></svg>
+                </button>
+                <span>Decline</span>
+            </div>
+            <div class="call-action-wrap">
+                <button id="accept-call-btn" class="btn-accept pulse-green">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
+                </button>
+                <span>Accept</span>
+            </div>
         </div>
     </div>
 </div>
@@ -154,25 +206,38 @@
 <!-- Fullscreen Video Overlay -->
 <div id="video-overlay" class="hidden">
     <video id="remote-video" autoplay playsinline></video>
-    <video id="local-video"  autoplay playsinline muted></video>
+    <video id="local-video" autoplay playsinline muted></video>
     <div class="video-top-bar">
         <span id="call-peer-name">Call</span>
         <span id="call-timer">00:00</span>
     </div>
     <div class="video-controls">
-        <button id="btn-flip-cam" class="vc-btn">Flip</button>
-        <button id="btn-speaker" class="vc-btn">Spkr</button>
-        <button id="btn-mute" class="vc-btn">Mute</button>
-        <button id="btn-end-call" class="vc-btn vc-end">End</button>
-        <button id="btn-toggle-cam" class="vc-btn">Cam</button>
-        <button id="btn-fullscreen" class="vc-btn">Full</button>
+        <button id="btn-flip-cam" class="vc-btn" title="Flip Camera">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3.11"/></svg>
+        </button>
+        <button id="btn-mute" class="vc-btn" title="Mute">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button id="btn-end-call" class="vc-btn vc-end" title="End Call">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" transform="rotate(135 12 12)"/></svg>
+        </button>
+        <button id="btn-toggle-cam" class="vc-btn" title="Toggle Camera">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </button>
+        <button id="btn-fullscreen" class="vc-btn" title="Fullscreen">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
     </div>
 </div>
 
+<!-- Lightbox -->
 <div id="lightbox" class="hidden">
     <button id="lightbox-close">✕</button>
     <img id="lightbox-img" src="" alt="Full size">
 </div>
+
+<!-- Toast Notification -->
+<div id="toast" class="hidden"></div>
 
 <script src="script.js"></script>
 </body>

@@ -1,115 +1,82 @@
 // Mobile keyboard fix
-function setVH() { document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
-setVH(); window.addEventListener('resize', setVH);
-
-const params = new URLSearchParams(window.location.search);
-const currentUser = params.get('user')?.toLowerCase().trim();
-const peerUser    = params.get('peer')?.toLowerCase().trim();
+function setVH() { 
+    document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); 
+}
+setVH(); 
+window.addEventListener('resize', setVH);
 
 // State
+let currentUser = null;
+let peerUser = null;
 let roomId = null;
 let typingTimeout = null;
 let replyingTo = null; // { id, text, sender }
 let selectedMessageId = null;
-
 let currentFacingMode = 'user';
 let isMuted = false;
 let isCamOff = false;
 let callTimerInt = null;
 let callSeconds = 0;
-
 let audioCtx = null;
-let ringTimeout = null;
-
-function playRingtone(isOutgoing = false) {
-    try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        
-        const freq1 = isOutgoing ? 440 : 600;
-        const freq2 = isOutgoing ? 480 : 800;
-        const pattern = isOutgoing ? [2000, 3000] : [400, 200, 400, 2000];
-        let step = 0;
-        
-        stopRingtone();
-        const currentRing = { active: true };
-        ringTimeout = currentRing;
-        
-        function nextTone() {
-            if (!currentRing.active) return;
-            const duration = pattern[step];
-            const isOn = step % 2 === 0;
-            
-            if (isOn) {
-                const osc1 = audioCtx.createOscillator();
-                const osc2 = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc1.connect(gain); osc2.connect(gain);
-                gain.connect(audioCtx.destination);
-                
-                osc1.type = 'sine'; osc2.type = 'sine';
-                osc1.frequency.value = freq1;
-                osc2.frequency.value = freq2;
-                
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gain.gain.setTargetAtTime(0, audioCtx.currentTime + (duration/1000) - 0.05, 0.015);
-                
-                osc1.start(); osc2.start();
-                osc1.stop(audioCtx.currentTime + (duration/1000));
-                osc2.stop(audioCtx.currentTime + (duration/1000));
-            }
-            
-            step = (step + 1) % pattern.length;
-            setTimeout(nextTone, duration);
-        }
-        
-        nextTone();
-    } catch(e) { console.error("Audio API blocked or not supported:", e); }
-}
-
-function stopRingtone() {
-    if (ringTimeout) {
-        ringTimeout.active = false;
-        ringTimeout = null;
-    }
-}
+let ringToneInt = null;
 
 const ICE_CONFIG = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
     ]
 };
 
 // Socket & WebRTC
 const socket = io({ autoConnect: false, transports: ['websocket', 'polling'] });
-let peerConnection = null; let localStream = null;
+let peerConnection = null; 
+let localStream = null;
 
-if (!currentUser || !peerUser) {
-    document.getElementById('setup-overlay').classList.remove('hidden');
-} else {
+/* ============================================================
+   AUTH & INITIALIZATION
+============================================================ */
+
+window.selectUser = function(user, peer) {
+    currentUser = user;
+    peerUser = peer;
     roomId = [currentUser, peerUser].sort().join('-');
+
+    // UI Updates
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    
     document.getElementById('peer-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
     document.getElementById('peer-avatar').innerText = peerUser.charAt(0).toUpperCase();
+    document.getElementById('self-name-badge').innerText = `You: ${currentUser.charAt(0).toUpperCase() + currentUser.slice(1)}`;
 
-    // Show "You: Kanha" badge so user knows which side they are
-    const selfBadge = document.getElementById('self-badge');
-    document.getElementById('self-name').innerText = currentUser.charAt(0).toUpperCase() + currentUser.slice(1);
-    selfBadge.style.display = 'flex';
-
-    // Connect immediately without login
+    // Connect
     socket.connect();
     setupUIListeners();
-}
+    showToast(`Logged in as ${currentUser}`);
+};
 
-function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function scrollToBottom() { const c = document.getElementById('chat-messages'); c.scrollTop = c.scrollHeight; }
+document.getElementById('logout-btn').addEventListener('click', () => {
+    if (confirm('Switch user?')) {
+        socket.disconnect();
+        currentUser = null;
+        peerUser = null;
+        document.getElementById('app').classList.add('hidden');
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('chat-messages').innerHTML = '';
+        if (localStream) endCallUI();
+    }
+});
 
-// --- Socket Events ---
+/* ============================================================
+   SOCKET EVENTS
+============================================================ */
+
 socket.on('connect', () => {
     document.getElementById('connecting-banner').classList.add('hidden');
     document.getElementById('status').innerText = 'Online';
     document.getElementById('status').classList.add('online');
+    document.getElementById('peer-dot').classList.add('online');
     socket.emit('join-room', { user: currentUser, peer: peerUser, roomId });
 });
 
@@ -117,56 +84,84 @@ socket.on('disconnect', () => {
     document.getElementById('connecting-banner').classList.remove('hidden');
     document.getElementById('status').innerText = 'Offline';
     document.getElementById('status').classList.remove('online');
+    document.getElementById('peer-dot').classList.remove('online');
 });
 
 socket.on('init-messages', (msgs) => {
-    document.getElementById('chat-messages').innerHTML = '';
-    msgs.forEach(addMessageToUI);
-    scrollToBottom();
-    // Mark them all as read if we just loaded them
+    const container = document.getElementById('chat-messages');
+    container.innerHTML = '';
+    
+    if (msgs.length === 0) {
+        document.getElementById('empty-state').classList.remove('hidden');
+    } else {
+        document.getElementById('empty-state').classList.add('hidden');
+        msgs.forEach(addMessageToUI);
+        scrollToBottom();
+    }
+    
+    // Mark as read
     msgs.filter(m => m.sender !== currentUser && m.status !== 'read').forEach(m => {
         socket.emit('message-status-update', { roomId, messageId: m.id, status: 'read' });
     });
 });
 
 socket.on('new-message', (msg) => {
+    document.getElementById('empty-state').classList.add('hidden');
     addMessageToUI(msg);
     scrollToBottom();
-    if (msg.sender === 'swaruu' && msg.sender !== currentUser) {
-        alert('1 new message from swaruu');
-    }
-    // Automatically send 'read' receipt since we are in the chat
+    
     if (msg.sender !== currentUser) {
         socket.emit('message-status-update', { roomId, messageId: msg.id, status: 'read' });
+        // Vibration if supported
+        if (navigator.vibrate) navigator.vibrate(100);
     }
 });
 
 socket.on('message-status-changed', ({ messageId, status }) => {
     const el = document.getElementById(`ticks-${messageId}`);
     if (el) {
-        if (status === 'delivered') { el.innerText = '✓✓'; el.className = 'ticks delivered'; }
-        if (status === 'read') { el.innerText = '✓✓'; el.className = 'ticks read'; }
+        el.className = `ticks ${status}`;
+        if (status === 'delivered' || status === 'read') el.innerText = '✓✓';
     }
 });
 
-socket.on('peer-online',  ({ user }) => { document.getElementById('status').innerText = 'Online'; document.getElementById('status').classList.add('online'); alert((user || peerUser) + ' has joined the chat!'); });
-socket.on('peer-offline', () => { document.getElementById('status').innerText = 'Offline'; document.getElementById('status').classList.remove('online'); });
+socket.on('peer-online', ({ user }) => {
+    document.getElementById('status').innerText = 'Online';
+    document.getElementById('peer-dot').classList.add('online');
+    showToast(`${user} is online`);
+});
+
+socket.on('peer-offline', () => {
+    document.getElementById('status').innerText = 'Offline';
+    document.getElementById('peer-dot').classList.remove('online');
+});
 
 socket.on('peer-typing', () => document.getElementById('typing-indicator').classList.remove('hidden'));
 socket.on('peer-stop-typing', () => document.getElementById('typing-indicator').classList.add('hidden'));
 
-socket.on('chat-cleared', () => { document.getElementById('chat-messages').innerHTML = '<div class="date-divider">Chat cleared 🗑️</div>'; });
-socket.on('message-deleted', ({ messageId }) => {
-    const el = document.querySelector(`.message[data-id="${messageId}"]`);
-    if (el) { el.innerHTML = 'This message was deleted'; el.className = 'message deleted'; }
+socket.on('chat-cleared', () => {
+    document.getElementById('chat-messages').innerHTML = '';
+    document.getElementById('empty-state').classList.remove('hidden');
+    showToast('Chat history cleared');
 });
 
-// --- Call Signaling Events ---
+socket.on('message-deleted', ({ messageId }) => {
+    const el = document.querySelector(`.message[data-id="${messageId}"]`);
+    if (el) {
+        el.innerHTML = 'This message was deleted';
+        el.className = 'message deleted';
+    }
+});
+
+/* ============================================================
+   CALL SIGNALING
+============================================================ */
+
 socket.on('incoming-call', ({ from }) => {
     document.getElementById('caller-name').innerText = from.charAt(0).toUpperCase() + from.slice(1);
     document.getElementById('caller-avatar').innerText = from.charAt(0).toUpperCase();
     document.getElementById('incoming-call-modal').classList.remove('hidden');
-    playRingtone(false);
+    startRingtone();
 });
 
 socket.on('call-accepted', async () => {
@@ -189,6 +184,7 @@ socket.on('call-ended', () => {
     document.getElementById('outgoing-call-modal').classList.add('hidden');
     document.getElementById('incoming-call-modal').classList.add('hidden');
     endCallUI();
+    showToast('Call ended');
 });
 
 socket.on('signal', async (data) => {
@@ -207,39 +203,40 @@ socket.on('signal', async (data) => {
     } catch (err) { console.error(err); }
 });
 
-// --- UI Listeners ---
+/* ============================================================
+   UI LISTENERS
+============================================================ */
+
 function setupUIListeners() {
     const input = document.getElementById('message-input');
     
-    document.getElementById('send-btn').addEventListener('click', sendMessage);
-    input.addEventListener('keydown', (e) => {
+    document.getElementById('send-btn').onclick = sendMessage;
+    input.onkeydown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-    });
+    };
     
-    // Typing indicator logic
-    input.addEventListener('input', () => {
+    input.oninput = () => {
         socket.emit('typing', { roomId, user: currentUser });
         clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => socket.emit('stop-typing', { roomId, user: currentUser }), 1500);
-    });
+        typingTimeout = setTimeout(() => socket.emit('stop-typing', { roomId, user: currentUser }), 2000);
+    };
 
-    input.addEventListener('focus', () => setTimeout(scrollToBottom, 350));
+    document.getElementById('close-reply-btn').onclick = clearReply;
     
-    document.getElementById('close-reply-btn').addEventListener('click', clearReply);
-    document.getElementById('clear-chat-btn').addEventListener('click', () => {
+    document.getElementById('clear-chat-btn').onclick = () => {
         if (confirm('Clear entire chat for everyone?')) socket.emit('clear-chat', { roomId });
-    });
+    };
 
-    // Media
-    document.getElementById('media-btn').addEventListener('click', () => document.getElementById('file-input').click());
-    document.getElementById('file-input').addEventListener('change', handleFileUpload);
-    document.getElementById('lightbox-close').addEventListener('click', () => document.getElementById('lightbox').classList.add('hidden'));
+    document.getElementById('media-btn').onclick = () => document.getElementById('file-input').click();
+    document.getElementById('file-input').onchange = handleFileUpload;
+    document.getElementById('lightbox-close').onclick = () => document.getElementById('lightbox').classList.add('hidden');
 
     // Context Menu
     document.addEventListener('click', (e) => {
         if (!e.target.closest('#context-menu')) document.getElementById('context-menu').classList.add('hidden');
     });
-    document.getElementById('ctx-reply').addEventListener('click', () => {
+
+    document.getElementById('ctx-reply').onclick = () => {
         const msgEl = document.querySelector(`.message[data-id="${selectedMessageId}"]`);
         if (msgEl) {
             const sender = msgEl.classList.contains('mine') ? 'You' : peerUser;
@@ -247,94 +244,66 @@ function setupUIListeners() {
             setReply(selectedMessageId, text, sender);
         }
         document.getElementById('context-menu').classList.add('hidden');
-    });
-    document.getElementById('ctx-delete-me').addEventListener('click', () => {
+    };
+
+    document.getElementById('ctx-delete-me').onclick = () => {
         const el = document.querySelector(`.message[data-id="${selectedMessageId}"]`);
         if (el) el.remove();
-    });
-    document.getElementById('ctx-delete-all').addEventListener('click', () => {
+        document.getElementById('context-menu').classList.add('hidden');
+    };
+
+    document.getElementById('ctx-delete-all').onclick = () => {
         socket.emit('delete-message', { roomId, messageId: selectedMessageId, deleteFor: 'everyone' });
         document.getElementById('context-menu').classList.add('hidden');
-    });
+    };
 
-    // Call UI Buttons
-    document.getElementById('accept-call-btn').addEventListener('click', async () => {
+    // Call Buttons
+    document.getElementById('video-call-btn').onclick = () => {
+        socket.emit('call-request', { roomId, from: currentUser });
+        document.getElementById('outgoing-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
+        document.getElementById('outgoing-avatar').innerText = peerUser.charAt(0).toUpperCase();
+        document.getElementById('outgoing-status').innerText = 'Calling...';
+        document.getElementById('outgoing-call-modal').classList.remove('hidden');
+        startRingtone(true);
+    };
+
+    document.getElementById('accept-call-btn').onclick = async () => {
         stopRingtone();
         document.getElementById('incoming-call-modal').classList.add('hidden');
         await startCallUI();
         await setupPeerConnection(false);
         socket.emit('call-accepted', { roomId, from: currentUser });
-    });
-    document.getElementById('decline-call-btn').addEventListener('click', () => {
+    };
+
+    document.getElementById('decline-call-btn').onclick = () => {
         stopRingtone();
         document.getElementById('incoming-call-modal').classList.add('hidden');
         socket.emit('call-declined', { roomId, from: currentUser });
-    });
-    document.getElementById('btn-end-call').addEventListener('click', () => {
+    };
+
+    document.getElementById('cancel-call-btn').onclick = () => {
+        stopRingtone();
+        socket.emit('call-ended', { roomId });
+        document.getElementById('outgoing-call-modal').classList.add('hidden');
+    };
+
+    document.getElementById('btn-end-call').onclick = () => {
         socket.emit('call-ended', { roomId });
         endCallUI();
-    });
-    document.getElementById('btn-mute').addEventListener('click', toggleMute);
-    document.getElementById('btn-speaker').addEventListener('click', toggleSpeaker);
-    document.getElementById('btn-toggle-cam').addEventListener('click', toggleCam);
-    document.getElementById('btn-flip-cam').addEventListener('click', flipCamera);
-    document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+    };
 
-    // Make local video draggable
+    document.getElementById('btn-mute').onclick = toggleMute;
+    document.getElementById('btn-toggle-cam').onclick = toggleCam;
+    document.getElementById('btn-flip-cam').onclick = flipCamera;
+    document.getElementById('btn-fullscreen').onclick = toggleFullscreen;
+
     setupDraggableVideo();
 }
 
-function setupDraggableVideo() {
-    const localVid = document.getElementById('local-video');
-    let isDragging = false;
-    let startX, startY, initialX, initialY;
+/* ============================================================
+   CHAT LOGIC
+============================================================ */
 
-    localVid.addEventListener('pointerdown', (e) => {
-        isDragging = true;
-        startX = e.clientX; startY = e.clientY;
-        const rect = localVid.getBoundingClientRect();
-        
-        // Convert right/bottom positioning to explicit left/top for dragging
-        if (!localVid.style.left) {
-            localVid.style.left = rect.left + 'px';
-            localVid.style.top = rect.top + 'px';
-            localVid.style.right = 'auto';
-            localVid.style.bottom = 'auto';
-        }
-        
-        initialX = parseFloat(localVid.style.left);
-        initialY = parseFloat(localVid.style.top);
-        localVid.setPointerCapture(e.pointerId);
-    });
-
-    localVid.addEventListener('pointermove', (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        localVid.style.left = (initialX + dx) + 'px';
-        localVid.style.top = (initialY + dy) + 'px';
-    });
-
-    localVid.addEventListener('pointerup', (e) => {
-        isDragging = false;
-        localVid.releasePointerCapture(e.pointerId);
-    });
-}
-
-// --- Replying ---
-function setReply(id, text, sender) {
-    replyingTo = { id, text, sender };
-    document.getElementById('reply-preview').classList.remove('hidden');
-    document.getElementById('reply-sender-name').innerText = sender;
-    document.getElementById('reply-text-content').innerText = text;
-    document.getElementById('message-input').focus();
-}
-function clearReply() {
-    replyingTo = null;
-    document.getElementById('reply-preview').classList.add('hidden');
-}
-
-// --- Chat Actions ---
 function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
@@ -349,32 +318,37 @@ function sendMessage() {
     });
     
     const localMsg = {
-        id: msgId,
-        sender: currentUser, text: text, type: 'text', replyTo: replyData, status: 'pending', timestamp: new Date()
+        id: msgId, sender: currentUser, text: text, type: 'text', 
+        replyTo: replyData, status: 'pending', timestamp: new Date()
     };
-    addMessageToUI(localMsg);
     
-    socket.emit('stop-typing', { roomId, user: currentUser });
-    input.value = ''; clearReply(); scrollToBottom(); input.focus();
+    document.getElementById('empty-state').classList.add('hidden');
+    addMessageToUI(localMsg);
+    scrollToBottom();
+    
+    input.value = ''; 
+    clearReply(); 
+    input.focus();
 }
 
 function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) return alert('File too large (Max 10MB).');
+    if (file.size > 10 * 1024 * 1024) return showToast('File too large (Max 10MB)');
 
     const reader = new FileReader();
     reader.onload = () => {
         const type = file.type.startsWith('image/') ? 'image' : 'file';
         const msgId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
         
-        socket.emit('send-message', { id: msgId, roomId, sender: currentUser, type, fileName: file.name, fileData: reader.result }, (ack) => {
-             const tickEl = document.getElementById(`ticks-${msgId}`);
-             if(tickEl){ tickEl.innerText = '✓'; tickEl.className = 'ticks sent'; }
+        socket.emit('send-message', { 
+            id: msgId, roomId, sender: currentUser, type, 
+            fileName: file.name, fileData: reader.result 
         });
         
         addMessageToUI({
-            id: msgId, sender: currentUser, type, fileName: file.name, fileData: reader.result, status: 'pending', timestamp: new Date()
+            id: msgId, sender: currentUser, type, fileName: file.name, 
+            fileData: reader.result, status: 'pending', timestamp: new Date()
         });
         scrollToBottom();
     };
@@ -384,7 +358,6 @@ function handleFileUpload(e) {
 
 function addMessageToUI(msg) {
     const container = document.getElementById('chat-messages');
-    
     if (document.querySelector(`.message[data-id="${msg.id}"]`)) return;
 
     const isMine = msg.sender === currentUser;
@@ -394,7 +367,6 @@ function addMessageToUI(msg) {
 
     let content = '';
     
-    // Reply block
     if (msg.replyTo) {
         content += `
         <div class="quoted-reply">
@@ -408,12 +380,11 @@ function addMessageToUI(msg) {
     } else if (msg.type === 'image') {
         content += `<img src="${msg.fileData}" class="media-img" onclick="showLightbox('${msg.fileData}')">`;
     } else if (msg.type === 'file') {
-        content += `<a href="${msg.fileData}" download="${msg.fileName}" class="media-file" style="color:white;text-decoration:underline;">📁 ${msg.fileName}</a>`;
+        content += `<a href="${msg.fileData}" download="${msg.fileName}" class="media-file">📁 ${msg.fileName}</a>`;
     }
 
     const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    // Ticks
     let ticksHtml = '';
     if (isMine) {
         let tClass = 'ticks pending'; let tText = '◷';
@@ -425,44 +396,20 @@ function addMessageToUI(msg) {
 
     div.innerHTML = `${content}<div class="msg-meta"><span class="timestamp">${time}</span>${ticksHtml}</div>`;
 
-    // Context menu binding
-    div.addEventListener('contextmenu', (e) => { e.preventDefault(); showContextMenu(e, msg.id, isMine); });
+    // Interaction
+    div.oncontextmenu = (e) => { e.preventDefault(); showContextMenu(e, msg.id, isMine); };
+    
     let lp;
-    div.addEventListener('touchstart', (e) => { lp = setTimeout(() => showContextMenu(e, msg.id, isMine), 600); });
-    div.addEventListener('touchend', () => clearTimeout(lp));
-    div.addEventListener('touchmove', () => clearTimeout(lp));
+    div.ontouchstart = (e) => { lp = setTimeout(() => showContextMenu(e, msg.id, isMine), 600); };
+    div.ontouchend = () => clearTimeout(lp);
+    div.ontouchmove = () => clearTimeout(lp);
 
     container.appendChild(div);
 }
 
-function showContextMenu(e, id, isMine) {
-    selectedMessageId = id;
-    const menu = document.getElementById('context-menu');
-    menu.classList.remove('hidden');
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    const y = e.touches ? e.touches[0].clientY : e.clientY;
-    menu.style.left = `${Math.min(x, window.innerWidth - 160)}px`;
-    menu.style.top = `${y}px`;
-    document.getElementById('ctx-delete-all').style.display = isMine ? 'block' : 'none';
-}
-
-function showLightbox(src) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox').classList.remove('hidden'); }
-
-// --- Video Call Logic ---
-document.getElementById('video-call-btn').addEventListener('click', () => {
-    socket.emit('call-request', { roomId, from: currentUser });
-    document.getElementById('outgoing-name').innerText = peerUser.charAt(0).toUpperCase() + peerUser.slice(1);
-    document.getElementById('outgoing-avatar').innerText = peerUser.charAt(0).toUpperCase();
-    document.getElementById('outgoing-status').innerText = 'Calling...';
-    document.getElementById('outgoing-call-modal').classList.remove('hidden');
-    playRingtone(true);
-});
-
-document.getElementById('cancel-call-btn').addEventListener('click', () => {
-    stopRingtone();
-    socket.emit('call-ended', { roomId });
-    document.getElementById('outgoing-call-modal').classList.add('hidden');
-});
+/* ============================================================
+   VIDEO CALL LOGIC
+============================================================ */
 
 async function startCallUI() {
     document.getElementById('outgoing-call-modal').classList.add('hidden');
@@ -484,7 +431,7 @@ async function startCallUI() {
         document.getElementById('local-video').srcObject = localStream;
     } catch (err) {
         console.error(err);
-        alert('Could not access camera/mic.');
+        showToast('Camera access denied');
         endCallUI();
     }
 }
@@ -537,58 +484,116 @@ function toggleCam() {
 async function flipCamera() {
     if (!localStream) return;
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-    
     localStream.getTracks().forEach(t => t.stop());
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: !isMuted });
-        if (isCamOff) localStream.getVideoTracks().forEach(t => t.enabled = false);
-        
         document.getElementById('local-video').srcObject = localStream;
-        
         if (peerConnection) {
             const senders = peerConnection.getSenders();
             const videoTrack = localStream.getVideoTracks()[0];
-            const audioTrack = localStream.getAudioTracks()[0];
-            
-            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-            if (videoSender && videoTrack) videoSender.replaceTrack(videoTrack);
-            
-            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-            if (audioSender && audioTrack) audioSender.replaceTrack(audioTrack);
+            const sender = senders.find(s => s.track.kind === 'video');
+            if (sender) sender.replaceTrack(videoTrack);
         }
-    } catch (e) {
-        console.error(e);
-        alert('Could not flip camera.');
-    }
+    } catch (e) { showToast('Flip failed'); }
 }
 
 function toggleFullscreen() {
     const el = document.getElementById('video-overlay');
-    if (!document.fullscreenElement) {
-        el.requestFullscreen().catch(err => console.error(err));
-    } else {
-        document.exitFullscreen();
-    }
+    if (!document.fullscreenElement) el.requestFullscreen().catch(e => {});
+    else document.exitFullscreen();
 }
 
-let isSpeaker = true;
-async function toggleSpeaker() {
-    const btn = document.getElementById('btn-speaker');
-    const remoteVid = document.getElementById('remote-video');
+/* ============================================================
+   UTILITIES
+============================================================ */
+
+function showContextMenu(e, id, isMine) {
+    selectedMessageId = id;
+    const menu = document.getElementById('context-menu');
+    menu.classList.remove('hidden');
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    menu.style.left = `${Math.min(x, window.innerWidth - 180)}px`;
+    menu.style.top = `${y}px`;
+    document.getElementById('ctx-delete-all').style.display = isMine ? 'block' : 'none';
+}
+
+function setReply(id, text, sender) {
+    replyingTo = { id, text, sender };
+    document.getElementById('reply-preview').classList.remove('hidden');
+    document.getElementById('reply-sender-name').innerText = sender;
+    document.getElementById('reply-text-content').innerText = text;
+    document.getElementById('message-input').focus();
+}
+
+function clearReply() {
+    replyingTo = null;
+    document.getElementById('reply-preview').classList.add('hidden');
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.innerText = msg;
+    t.classList.add('show');
+    t.classList.remove('hidden');
+    setTimeout(() => {
+        t.classList.remove('show');
+        setTimeout(() => t.classList.add('hidden'), 300);
+    }, 3000);
+}
+
+function showLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.remove('hidden');
+}
+
+function escapeHtml(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function scrollToBottom() {
+    const c = document.getElementById('chat-messages');
+    c.scrollTop = c.scrollHeight;
+}
+
+function startRingtone(isOutgoing = false) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     
-    if (typeof remoteVid.setSinkId !== 'undefined') {
-        try {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const audioOuts = devices.filter(d => d.kind === 'audiooutput');
-            if (audioOuts.length > 1) {
-                isSpeaker = !isSpeaker;
-                const sinkId = isSpeaker ? audioOuts[0].deviceId : audioOuts[1].deviceId;
-                await remoteVid.setSinkId(sinkId);
-                isSpeaker ? btn.classList.remove('off') : btn.classList.add('off');
-                return;
-            }
-        } catch (e) { console.error(e); }
-    }
-    // Fallback for mobile where JS can't easily force it
-    alert("On mobile devices, speaker routing is managed by your OS automatically. To force the earpiece, try turning off your camera.");
+    stopRingtone();
+    ringToneInt = setInterval(() => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = isOutgoing ? 440 : 600;
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+    }, 1000);
+}
+
+function stopRingtone() {
+    clearInterval(ringToneInt);
+}
+
+function setupDraggableVideo() {
+    const v = document.getElementById('local-video');
+    let dragging = false, sx, sy, ix, iy;
+    v.onpointerdown = (e) => {
+        dragging = true; sx = e.clientX; sy = e.clientY;
+        const r = v.getBoundingClientRect();
+        v.style.left = r.left + 'px'; v.style.top = r.top + 'px';
+        v.style.right = 'auto'; v.style.bottom = 'auto';
+        ix = r.left; iy = r.top;
+        v.setPointerCapture(e.pointerId);
+    };
+    v.onpointermove = (e) => {
+        if (!dragging) return;
+        v.style.left = (ix + e.clientX - sx) + 'px';
+        v.style.top = (iy + e.clientY - sy) + 'px';
+    };
+    v.onpointerup = (e) => {
+        dragging = false;
+        v.releasePointerCapture(e.pointerId);
+    };
 }
